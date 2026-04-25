@@ -6,21 +6,23 @@
 	let finalTranscript = '';
 	let interimTranscript = '';
 
-	// API Key da xAI (carregada do .env)
-	const apiKey = import.meta.env.VITE_XAI_API_KEY;
+	// Local proxy that injects the xAI Authorization header (do NOT call xAI directly from the browser).
+	const PROXY_URL = (import.meta.env.VITE_STT_PROXY_URL as string) ?? 'ws://localhost:8787/stt';
 
 	let ws: WebSocket | null = null;
+	let audioContext: AudioContext | null = null;
+	let workletNode: AudioWorkletNode | null = null;
+	let sourceNode: MediaStreamAudioSourceNode | null = null;
+	let mediaStream: MediaStream | null = null;
 
 	onMount(() => {
-		if (!apiKey) {
-			console.warn('⚠️  API Key da xAI não configurada no .env');
-		} else {
-      console.log('✅ API Key da xAI carregada');
-    } 
+		console.log('STT proxy:', PROXY_URL);
 	});
 
 	async function toggleListening() {
 		if (isListening) {
+			stopAudioCapture();
+			try { ws?.send(JSON.stringify({ type: 'audio.done' })); } catch {}
 			ws?.close();
 			isListening = false;
 			return;
@@ -30,61 +32,85 @@
 		transcript = '';
 		isListening = true;
 
-		// Conexão com WebSocket da xAI (nova API de voz)
-		ws = new WebSocket('wss://api.x.ai/v1/stt');
+		// Start mic first so we know the real sample rate (browsers default to 48 kHz).
+		await startAudioCapture();
+		const sampleRate = audioContext?.sampleRate ?? 16000;
 
-		ws.onopen = () => {
-			console.log('✅ Conectado ao Grok STT');
-			// Envia autenticação
-			ws?.send(JSON.stringify({
-				type: "auth",
-				api_key: apiKey
-			}));
-		};
+		const params = new URLSearchParams({
+			sample_rate: String(sampleRate),
+			encoding: 'pcm',
+			interim_results: 'true',
+			language: 'en',
+		});
+		ws = new WebSocket(`${PROXY_URL}?${params.toString()}`);
+		ws.binaryType = 'arraybuffer';
+
+		ws.onopen = () => console.log('✅ Conectado ao proxy STT');
 
 		ws.onmessage = (event) => {
 			const data = JSON.parse(event.data);
-			
-			if (data.type === 'transcript') {
+			if (data.type === 'transcript.partial' || data.type === 'transcript.done') {
 				if (data.is_final) {
-					finalTranscript += data.text + ' ';
+					finalTranscript += (data.text ?? '') + ' ';
+					interimTranscript = '';
 				} else {
-					interimTranscript = data.text;
+					interimTranscript = data.text ?? '';
 				}
 				transcript = finalTranscript + interimTranscript;
+			} else if (data.type === 'error') {
+				console.error('STT error:', data.message);
 			}
 		};
 
 		ws.onerror = (err) => {
-			console.error('Erro no WebSocket xAI:', err);
+			console.error('Erro no WebSocket STT:', err);
+			stopAudioCapture();
 			isListening = false;
 		};
 
 		ws.onclose = () => {
+			stopAudioCapture();
 			isListening = false;
 		};
-
-		// Aqui você deve capturar áudio do microfone e enviar chunks
-		// (código completo de captura de áudio abaixo)
-		startAudioCapture();
 	}
 
 	async function startAudioCapture() {
-		const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-		const audioContext = new AudioContext();
-		const source = audioContext.createMediaStreamSource(stream);
-		const processor = audioContext.createScriptProcessor(4096, 1, 1);
+		mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+		audioContext = new AudioContext();
 
-		processor.onaudioprocess = (e) => {
-			const inputData = e.inputBuffer.getChannelData(0);
-			// Converte para PCM e envia para xAI
+		// Carrega o AudioWorklet (substitui ScriptProcessorNode, que está deprecated)
+		await audioContext.audioWorklet.addModule('/pcm-processor.js');
+
+		sourceNode = audioContext.createMediaStreamSource(mediaStream);
+		workletNode = new AudioWorkletNode(audioContext, 'pcm-processor');
+
+		workletNode.port.onmessage = (event) => {
+			// pcm-processor.js posts an ArrayBuffer of signed 16-bit little-endian PCM.
+			const pcmBuffer = event.data as ArrayBuffer;
 			if (ws?.readyState === WebSocket.OPEN) {
-				ws.send(inputData.buffer);
+				ws.send(pcmBuffer);
 			}
 		};
 
-		source.connect(processor);
-		processor.connect(audioContext.destination);
+		sourceNode.connect(workletNode);
+		// Não conectamos ao destination para evitar feedback do microfone.
+	}
+
+	function stopAudioCapture() {
+		try {
+			workletNode?.port.close();
+			workletNode?.disconnect();
+		} catch {}
+		try {
+			sourceNode?.disconnect();
+		} catch {}
+		mediaStream?.getTracks().forEach((t) => t.stop());
+		audioContext?.close().catch(() => {});
+
+		workletNode = null;
+		sourceNode = null;
+		mediaStream = null;
+		audioContext = null;
 	}
 
 	function copyTranscript() {
