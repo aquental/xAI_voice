@@ -44,17 +44,30 @@
 
 	function scheduleSilenceTimer() {
 		clearSilenceTimer();
-		if (engineState !== 'listening' || !engine) return;
+		const state = engineState;
+		if ((state !== 'listening' && state !== 'awaiting_confirmation') || !engine) return;
 		silenceTimer = setTimeout(() => {
 			silenceTimer = null;
-			if (engineState !== 'listening') return;
+			const s = engineState;
+			if (s === 'awaiting_confirmation') {
+				engine?.finishListening().catch((e) => {
+					console.error('[VoiceFormAssistant] finishListening (confirmação silêncio) falhou:', e);
+				});
+				return;
+			}
+			if (s !== 'listening') return;
 			const field = currentField;
 			if (!field) return;
-			const value = (formData[field] ?? '').trim();
-			if (!value) return;
-			engine?.submitTypedAnswer(value).catch((e) => {
-				console.error('[VoiceFormAssistant] submitTypedAnswer falhou:', e);
-			});
+			const typedValue = (formData[field] ?? '').trim();
+			if (typedValue) {
+				engine?.submitTypedAnswer(typedValue).catch((e) => {
+					console.error('[VoiceFormAssistant] submitTypedAnswer falhou:', e);
+				});
+			} else if (interimTranscript.trim()) {
+				engine?.finishListening().catch((e) => {
+					console.error('[VoiceFormAssistant] finishListening (silêncio) falhou:', e);
+				});
+			}
 		}, SILENCE_TIMEOUT_MS);
 	}
 
@@ -88,6 +101,8 @@
 						const step = e.currentStep;
 						currentField = (step?.field as string) ?? '';
 						scheduleSilenceTimer();
+					} else if (ev.state === 'awaiting_confirmation') {
+						scheduleSilenceTimer();
 					} else {
 						clearSilenceTimer();
 					}
@@ -97,9 +112,11 @@
 					}
 					break;
 				case 'partial':
+					// Só reinicia o timer quando o texto muda de verdade.
+					// Eventos repetidos/vazios do xAI (flushes) chegam com o mesmo
+					// texto e não devem resetar a contagem de silêncio.
+					if ((engineState === 'listening' || engineState === 'awaiting_confirmation') && ev.text !== interimTranscript) scheduleSilenceTimer();
 					interimTranscript = ev.text;
-					// Usuário ainda está falando — adia o timeout de silêncio.
-					if (engineState === 'listening') scheduleSilenceTimer();
 					break;
 				case 'final':
 					lastFinalText = ev.text;

@@ -120,14 +120,12 @@ export class VoiceFormEngine<T extends Record<string, string>> {
 		// O motor não decide quando parar — espera o componente UI chamar finishListening().
 	}
 
-	/** Pula o passo atual sem salvar nenhum valor e avança para o próximo campo. */
+	/** Pula o passo atual preservando o valor já preenchido e avança para o próximo campo. */
 	async skipField(): Promise<void> {
 		if (this.state !== 'listening' && this.state !== 'awaiting_confirmation') return;
 		const step = this.currentStep;
 		if (!step) return;
 		try { this.deps.stt.cancel(); } catch { /* ignore */ }
-		this.data[step.field as string] = '';
-		this.emit({ type: 'field', field: step.field as string, value: '' });
 		this.pending = null;
 		await this.setState('speaking_redirect');
 		await this.speak('Certo, pulando este campo. Vou para o próximo.');

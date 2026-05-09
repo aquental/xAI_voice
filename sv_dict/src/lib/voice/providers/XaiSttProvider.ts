@@ -13,6 +13,10 @@ export class XaiSttProvider implements SpeechToTextProvider {
 	private mediaStream: MediaStream | null = null;
 	private finalText = '';
 	private interimText = '';
+	// Último texto não-vazio de is_final:true. O xAI envia os eventos is_final=true
+	// de forma revisional (cada evento substitui o anterior para a mesma frase),
+	// não incremental. Acumular com += causa duplicação.
+	private lastFinalChunk = '';
 	private language: Language = 'pt-BR';
 	private onPartial?: (text: string) => void;
 	private finalResolver: ((r: TranscriptionResult) => void) | null = null;
@@ -28,6 +32,7 @@ export class XaiSttProvider implements SpeechToTextProvider {
 		this.onPartial = opts.onPartial;
 		this.finalText = '';
 		this.interimText = '';
+		this.lastFinalChunk = '';
 
 		this.mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
 		this.audioContext = new AudioContext();
@@ -42,13 +47,13 @@ export class XaiSttProvider implements SpeechToTextProvider {
 			interim_results: 'true',
 			language: this.language === 'pt-BR' ? 'pt' : 'en'
 		});
-		this.ws = new WebSocket(`${this.proxyUrl}?${params.toString()}`);
-		this.ws.binaryType = 'arraybuffer';
+		const ws = new WebSocket(`${this.proxyUrl}?${params.toString()}`);
+		ws.binaryType = 'arraybuffer';
+		this.ws = ws;
 
 		const wsOpened = new Promise<void>((resolve, reject) => {
-			if (!this.ws) return reject(new Error('WS não inicializado'));
-			this.ws.addEventListener('open', () => resolve(), { once: true });
-			this.ws.addEventListener('error', () => reject(new Error('Erro ao abrir WS STT')), { once: true });
+			ws.addEventListener('open', () => resolve(), { once: true });
+			ws.addEventListener('error', () => reject(new Error('Erro ao abrir WS STT')), { once: true });
 		});
 
 		this.workletNode.port.onmessage = (event) => {
@@ -58,21 +63,35 @@ export class XaiSttProvider implements SpeechToTextProvider {
 			}
 		};
 
-		this.ws.onmessage = (event) => {
+		ws.onmessage = (event) => {
+			// Ignora mensagens de sessões antigas (WS foi substituído ou cancelado).
+			if (ws !== this.ws) return;
 			let data: any;
 			try { data = JSON.parse(event.data); } catch { return; }
-			if (data.type === 'transcript.partial' || data.type === 'transcript.done') {
+
+			if (data.type === 'transcript.done') {
+				// transcript.done sinaliza fim do stream. O xAI envia is_final=null
+				// (não true), por isso tratamos qualquer transcript.done como fim.
+				// Preferimos o texto do transcript.done se vier preenchido;
+				// caso contrário usamos o último chunk não-vazio de is_final=true.
+				const best = ((data.text ?? '').trim() || this.lastFinalChunk);
+				this.finalText = best;
+				this.interimText = '';
+				this.onPartial?.(this.finalText);
+				if (this.finalResolver) this.resolveFinal();
+			} else if (data.type === 'transcript.partial') {
 				if (data.is_final) {
-					this.finalText += (data.text ?? '') + ' ';
+					// O xAI envia is_final=true de forma revisional: cada evento
+					// é a melhor transcrição da frase inteira até agora, não um
+					// novo segmento. Guardamos apenas o último não-vazio.
+					const chunk = (data.text ?? '').trim();
+					if (chunk) this.lastFinalChunk = chunk;
+					this.finalText = this.lastFinalChunk;
 					this.interimText = '';
 				} else {
 					this.interimText = data.text ?? '';
 				}
 				this.onPartial?.(this.finalText + this.interimText);
-
-				if (data.type === 'transcript.done' && data.is_final && this.finalResolver) {
-					this.resolveFinal();
-				}
 			} else if (data.type === 'error') {
 				this.finalRejecter?.(new Error(data.message ?? 'Erro STT'));
 				this.finalRejecter = null;
