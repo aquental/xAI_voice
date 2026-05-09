@@ -10,7 +10,13 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+build
 *.local
+
+# Test artifacts
+coverage
+*.test.snap
+.bun
 
 # Editor directories and files
 .vscode/*
@@ -22,3 +28,4 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+.DS_Store

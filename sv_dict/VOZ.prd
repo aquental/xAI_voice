@@ -1,0 +1,280 @@
+# VOZ - Motor de Formulários por Voz para Cadastro de Empresa
+
+## Decisões fechadas
+- STT será implementado com xAI.
+- TTS deve tocar automaticamente.
+- O app PSI usa SvelteKit.
+- O cadastro de empresa já existe e será reutilizado.
+- Validação formal de CNPJ fica fora do piloto.
+- A arquitetura deve ser um motor reutilizável de formulários por voz, não um chatbot.
+---
+## Atualização de escopo técnico
+### Motor de formulários por voz
+A implementação deve criar uma camada genérica chamada `VoiceFormEngine`.
+Essa camada será responsável por:
+- controlar etapas do formulário;
+- executar perguntas por voz;
+- capturar resposta do usuário;
+- enviar áudio para STT xAI;
+- interpretar transcrição;
+- atualizar campos do formulário;
+- pedir confirmação quando necessário;
+- avançar para próxima etapa;
+- permitir reuso em outros cadastros.
+O cadastro de empresa será apenas o primeiro schema consumido por esse motor.
+---
+## Arquitetura atualizada
+```txt
+CompanyRegistrationPage.svelte
+  ↓
+VoiceFormAssistant.svelte
+  ↓
+VoiceFormEngine
+  ↓
+xAI STT Provider
+xAI TTS Provider
+VoiceFormParser
+  ↓
+Existing Company Registration Service
+
+⸻
+
+Provider obrigatório: xAI STT
+
+interface SpeechToTextProvider {
+  transcribe(audio: Blob): Promise<TranscriptionResult>;
+}
+type TranscriptionResult = {
+  text: string;
+  confidence?: number;
+  language: "pt-BR";
+  provider: "xai";
+};
+
+⸻
+
+CNPJ no piloto
+
+O sistema deve:
+
+* aceitar CNPJ falado ou digitado;
+* remover caracteres não numéricos;
+* formatar visualmente quando possível;
+* exigir 14 dígitos para considerar completo;
+* pedir confirmação do usuário;
+* não validar dígitos verificadores ainda.
+
+Exemplo:
+
+function normalizeCnpj(value: string): string {
+  const digits = value.replace(/\D/g, "");
+  if (digits.length !== 14) return value;
+  return digits.replace(
+    /^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/,
+    "$1.$2.$3/$4-$5"
+  );
+}
+
+⸻
+
+Requisito novo: reprodução automática de TTS
+
+O assistente deve tocar automaticamente cada mensagem gerada por TTS.
+
+Observação técnica
+
+Navegadores podem bloquear autoplay de áudio sem interação prévia do usuário.
+
+Como o fluxo começa após clique em “Preencher com voz”, esse clique deve ser usado como gesto inicial para habilitar reprodução automática durante a sessão.
+
+Critério:
+
+* após o clique inicial, o áudio do assistente deve tocar sem o usuário precisar clicar novamente;
+* se o navegador bloquear, exibir fallback visual com botão “Tocar áudio”.
+
+⸻
+
+Requisito novo: não implementar chatbot
+
+O sistema não deve aceitar conversa aberta.
+
+O VoiceFormEngine deve operar como máquina de estados orientada por schema.
+
+O assistente só pode:
+
+* perguntar pelo campo atual;
+* confirmar dado capturado;
+* pedir repetição;
+* informar erro;
+* avançar;
+* cancelar;
+* finalizar.
+
+Não deve responder perguntas gerais do usuário.
+
+⸻
+
+Schema como fonte de verdade
+
+Cada cadastro deve definir um schema próprio.
+
+type VoiceFormSchema<T> = {
+  formType: string;
+  language: "pt-BR";
+  introMessage: string;
+  completionMessage: string;
+  steps: VoiceFormStep<T>[];
+};
+type VoiceFormStep<T> = {
+  id: string;
+  field: keyof T | string;
+  prompt: string;
+  required: boolean;
+  confirmationRequired: boolean;
+  parserHint?: string;
+  normalizer?: string;
+  validator?: string;
+};
+
+⸻
+
+Schema do cadastro de empresa
+
+export const companyRegistrationVoiceSchema = {
+  formType: "company_registration",
+  language: "pt-BR",
+  introMessage:
+    "Vamos cadastrar os dados da sua empresa. Vou fazer uma pergunta por vez.",
+  completionMessage:
+    "Pronto. Revise os dados na tela e confirme para salvar.",
+  steps: [
+    {
+      id: "companyName",
+      field: "companyName",
+      prompt: "Qual é o nome da empresa ou clínica?",
+      required: true,
+      confirmationRequired: false,
+      parserHint: "Nome jurídico, nome fantasia ou nome da clínica."
+    },
+    {
+      id: "cnpj",
+      field: "cnpj",
+      prompt:
+        "Qual é o CNPJ? Você pode falar os números devagar ou digitar.",
+      required: true,
+      confirmationRequired: true,
+      normalizer: "cnpj_basic",
+      validator: "cnpj_length_only"
+    },
+    {
+      id: "phone",
+      field: "phone",
+      prompt: "Qual é o telefone principal da clínica?",
+      required: true,
+      confirmationRequired: true,
+      normalizer: "phone_br"
+    },
+    {
+      id: "email",
+      field: "email",
+      prompt: "Qual é o e-mail principal?",
+      required: true,
+      confirmationRequired: true,
+      normalizer: "email_spoken_pt_br"
+    },
+    {
+      id: "address",
+      field: "address",
+      prompt:
+        "Qual é o endereço da clínica? Pode falar rua, número, complemento, bairro, cidade e estado.",
+      required: true,
+      confirmationRequired: true,
+      parserHint:
+        "Extrair rua, número, complemento, bairro, cidade, estado e CEP quando disponível."
+    }
+  ]
+};
+
+⸻
+
+Endpoint STT atualizado
+
+POST /api/voice/stt
+
+Responsabilidade:
+
+* receber áudio do frontend;
+* encaminhar para xAI;
+* retornar transcrição;
+* nunca expor API key ao browser.
+
+Response:
+
+{
+  "text": "Rua Augusta 1520 sala 4 Consolação São Paulo SP",
+  "language": "pt-BR",
+  "provider": "xai"
+}
+
+⸻
+
+Endpoint TTS atualizado
+
+POST /api/voice/tts
+
+Responsabilidade:
+
+* receber texto do assistente;
+* gerar áudio com xAI;
+* retornar áudio para reprodução automática.
+
+Response:
+
+Response audio/mpeg
+
+⸻
+
+Critério de aceite adicional
+
+CA07 — Motor reutilizável
+
+Dado que existe um novo cadastro no PSI
+Quando um desenvolvedor cria um novo VoiceFormSchema
+Então o mesmo VoiceFormAssistant deve conseguir conduzir o preenchimento por voz sem recriar lógica de conversa.
+
+CA08 — Bloqueio de chatbot
+
+Dado que o usuário faz uma pergunta fora do contexto do cadastro
+Quando a sessão de voz está ativa
+Então o assistente deve redirecionar para o campo atual.
+
+Exemplo:
+
+Usuário:
+
+Qual é a previsão do tempo?
+
+Assistente:
+
+Neste momento estou ajudando com o cadastro da empresa. Qual é o telefone principal da clínica?
+
+CA09 — Autoplay
+
+Dado que o usuário clicou em “Preencher com voz”
+Quando o assistente gera uma mensagem TTS
+Então o áudio deve tocar automaticamente.
+
+Se o navegador bloquear:
+
+Então o sistema deve mostrar botão “Tocar áudio”.
+
+⸻
+
+
+Este piloto não implementa um assistente conversacional genérico.
+
+Ele implementa um motor de entrada de dados por voz baseado em schemas.
+
+A voz é a interface.
+O formulário continua sendo a fonte da verdade.
+O schema controla a conversa.

@@ -1,0 +1,578 @@
+# Assistente de Voz PSI para Cadastro
+
+
+## Meta
+Criar uma interface de voz conversacional dentro do PSI para reduzir o atrito no preenchimento de dados cadastrais da clínica/empresa.
+
+Ao invés de obrigar o usuário a digitar formulários extensos em um celular, o sistema conduz uma conversa natural usando voz, confirmando dados importantes e preenchendo automaticamente os campos do cadastro.
+
+O primeiro escopo será o cadastro da empresa/clínica:
+
+* Nome da empresa
+* CNPJ
+* Telefone
+* E-mail
+* Endereço completo
+
+O objetivo é reduzir:
+
+* tempo de cadastro,
+* esforço cognitivo,
+* abandono do onboarding,
+* dependência de teclado/mobile.
+
+⸻
+
+## Problema
+
+Hoje o cadastro da clínica exige preenchimento manual de múltiplos campos administrativos.
+
+Isso gera fricção principalmente porque:
+
+* psicólogos frequentemente usam celular;
+* muitos não gostam de digitar;
+* dados administrativos são percebidos como burocráticos;
+* o contexto de trabalho do usuário é predominantemente verbal/humano;
+* formulários longos quebram o fluxo mental.
+
+Mesmo sendo um cadastro feito poucas vezes, ele é um momento crítico:
+
+* se o onboarding for ruim, a percepção do produto piora imediatamente;
+* usuários podem abandonar ou postergar a configuração;
+* o sistema começa “parecendo burocrático”.
+
+⸻
+
+## Oportunidade
+
+A voz pode transformar o onboarding em algo mais próximo de uma secretária virtual:
+
+“Vamos configurar sua clínica rapidinho.
+Qual é o nome da empresa?”
+
+Isso reduz:
+
+* atrito;
+* sensação de tarefa administrativa;
+* complexidade percebida.
+
+E cria diferenciação forte para o PSI.
+
+A maioria dos ERPs e CRMs ainda trata voz como gimmick.
+Aqui ela pode virar o principal modelo de interação.
+
+⸻
+
+## Objetivos
+
+Objetivos de negócio
+
+* Aumentar conclusão do onboarding
+* Reduzir tempo até primeiro uso do sistema
+* Diferenciar o PSI no mercado
+* Aumentar percepção de modernidade/inteligência do produto
+* Criar fundação para futuras automações por voz
+
+⸻
+
+## Objetivos do usuário
+
+* Configurar o sistema rapidamente
+* Evitar digitação
+* Conseguir usar o sistema pelo celular com facilidade
+* Preencher dados sem navegar entre múltiplos campos
+
+⸻
+
+## Não objetivos
+
+Neste primeiro momento NÃO iremos:
+
+* fazer edição complexa de cadastro por voz;
+* interpretar documentos automaticamente;
+* fazer OCR de cartão/CNPJ;
+* permitir comandos totalmente livres;
+* controlar o sistema inteiro por voz.
+
+O foco é:
+
+Conversa guiada para preenchimento assistido.
+
+⸻
+
+Usuário-alvo
+
+Primário
+
+Psicólogos e psicanalistas autônomos.
+
+Características:
+
+* usam muito celular;
+* pouco interesse técnico;
+* baixa tolerância a tarefas administrativas;
+* preferem interações naturais;
+* valorizam praticidade.
+
+⸻
+
+# Proposta do Produto
+
+O usuário inicia o cadastro e pode escolher:
+
+* Digitar manualmente
+    OU
+* “Preencher com voz”
+
+Ao ativar voz:
+
+1. O sistema entra em modo conversacional
+2. Faz perguntas uma por vez
+3. Converte fala em texto
+4. Preenche os campos automaticamente
+5. Confirma informações críticas
+6. Finaliza o cadastro
+
+⸻
+
+## Fluxo da Experiência
+
+### Fluxo ideal
+
+Etapa 1 — Entrada
+
+Tela mostra:
+
+* botão “Cadastrar com Voz”
+* explicação curta:
+    “Você pode preencher os dados falando naturalmente.”
+
+⸻
+
+Etapa 2 — Início da conversa
+
+TTS:
+
+“Olá! Vamos configurar sua clínica.
+Pode me dizer o nome da empresa?”
+
+Usuário responde:
+
+“Clínica Mente Serena”
+
+Campo é preenchido automaticamente.
+
+UI mostra:
+
+* animação de escuta;
+* transcrição em tempo real;
+* campo sendo preenchido.
+
+⸻
+
+Etapa 3 — Coleta guiada
+
+Sistema continua:
+
+“Qual é o CNPJ?”
+
+Usuário:
+
+“quarenta e dois ponto…”
+
+Aqui existe uma decisão importante:
+
+Opinião forte:
+
+NÃO peça CNPJ falado “naturalmente” no MVP.
+
+É muito sujeito a erro.
+
+Melhor UX:
+
+* permitir digitação opcional;
+    OU
+* pedir números pausadamente;
+    OU
+* permitir colar via clipboard.
+
+Sugestão:
+Após detectar dificuldade:
+
+“Se preferir, você pode digitar o CNPJ.”
+
+Isso evita frustração.
+
+⸻
+
+Etapa 4 — Endereço
+
+Aqui a IA pode brilhar.
+
+Usuário:
+
+“Rua Augusta 1520 sala 4 Consolação São Paulo”
+
+O sistema estrutura:
+
+* Rua: Augusta
+* Número: 1520
+* Complemento: Sala 4
+* Bairro: Consolação
+* Cidade: São Paulo
+
+Depois confirma:
+
+“Entendi: Rua Augusta, número 1520, sala 4, Consolação, São Paulo. Está correto?”
+
+Esse momento é MUITO importante.
+
+Nunca grave automaticamente dados críticos sem confirmação.
+
+⸻
+
+Etapa 5 — Revisão
+
+Tela apresenta:
+
+* todos os dados preenchidos;
+* campos editáveis;
+* botão:
+    “Confirmar cadastro”.
+
+⸻
+
+## UX Principles (Muito importantes)
+
+1. Conversa curta
+
+Não faça um chatbot “falante”.
+
+Objetivo:
+
+* velocidade;
+* clareza;
+* eficiência.
+
+Respostas curtas.
+
+⸻
+
+2. Uma pergunta por vez
+
+Não faça:
+
+“Qual nome, telefone e endereço?”
+
+Carga cognitiva explode.
+
+⸻
+
+3. Mostrar sempre texto na tela
+
+Fundamental.
+
+O usuário precisa:
+
+* confiar;
+* validar;
+* corrigir.
+
+A voz complementa a interface.
+Não substitui completamente.
+
+⸻
+
+4. Permitir fallback manual imediato
+
+Toda etapa deve permitir:
+
+* digitar;
+* corrigir;
+* editar.
+
+Nunca prender o usuário na voz.
+
+⸻
+
+5. Silêncio não pode parecer erro
+
+Se IA estiver processando:
+
+* mostrar estado visual;
+* animação;
+* “Entendi, só um instante…”
+
+⸻
+
+Funcionalidades
+
+Funcionalidades MVP
+
+Captura de voz
+
+* botão pressionar para falar;
+* ou modo contínuo simples.
+
+⸻
+
+Speech-to-Text
+
+* transcrição em tempo real.
+
+⸻
+
+TTS
+
+* respostas faladas do assistente.
+
+⸻
+
+Extração estruturada
+
+Transformar fala livre em campos estruturados.
+
+⸻
+
+Confirmação de dados
+
+Especialmente:
+
+* CNPJ
+* telefone
+* e-mail
+* endereço
+
+⸻
+
+Correção contextual
+
+Usuário:
+
+“corrige o telefone”
+
+Sistema:
+
+* volta para o campo correto.
+
+⸻
+
+## Arquitetura Conceitual
+
+Fluxo técnico
+
+Usuário fala →
+
+STT →
+
+LLM/Grok interpreta →
+
+Extrai estrutura →
+
+Frontend atualiza campos →
+
+TTS responde.
+
+⸻
+
+## Estratégia Conversacional
+
+Esse é o coração do produto.
+
+O sistema precisa operar como:
+
+* assistente administrativo;
+    e NÃO
+* chatbot genérico.
+
+Então o prompt/system role deve ser extremamente restrito.
+
+Exemplo:
+
+“Seu papel é coletar dados cadastrais de forma objetiva e amigável. Faça apenas uma pergunta por vez.”
+
+Isso evita:
+
+* respostas longas;
+* divagações;
+* comportamento estranho.
+
+⸻
+
+## Edge Cases
+
+Áudio ruim
+
+Sistema:
+
+“Não consegui entender muito bem. Pode repetir?”
+
+⸻
+
+Informação incompleta
+
+Usuário:
+
+“Rua Augusta”
+
+Sistema:
+
+“Qual o número?”
+
+⸻
+
+Usuário muda de assunto
+
+Usuário:
+
+“Depois eu vejo isso”
+
+Sistema:
+
+“Sem problemas. Deseja continuar o cadastro mais tarde?”
+
+⸻
+
+Erro de interpretação
+
+Sempre permitir:
+
+* editar campo;
+* repetir resposta.
+
+⸻
+
+## Métricas de sucesso
+
+Produto
+
+* taxa de conclusão do onboarding;
+* tempo médio de cadastro;
+* abandono durante cadastro;
+* percentual de usuários que escolhem voz;
+* taxa de correção manual após voz.
+
+⸻
+
+## UX
+
+* número médio de repetições por campo;
+* taxa de erro em CNPJ;
+* taxa de erro em endereço;
+* satisfação do onboarding.
+
+⸻
+
+## Riscos
+
+1. A voz parecer mais lenta que digitação
+
+Esse é o MAIOR risco.
+
+Se o fluxo for:
+
+* lento,
+* verboso,
+* teatral,
+
+o usuário abandona.
+
+⸻
+
+2. Erros em campos críticos
+
+Especialmente:
+
+* CNPJ
+* e-mail
+* telefone
+
+Precisa confirmação explícita.
+
+⸻
+
+3. Ambiente real
+
+Psicólogos podem:
+
+* estar em trânsito;
+* em consultório;
+* em locais silenciosos.
+
+Precisa tolerar ruído moderado.
+
+⸻
+
+Sequenciamento
+
+Fase 1 — MVP
+
+Cadastro de empresa:
+
+* nome;
+* telefone;
+* e-mail;
+* endereço;
+* confirmação.
+
+⸻
+
+Fase 2
+
+Melhorias:
+
+* correções por voz;
+* navegação por voz;
+* retomada de cadastro.
+
+⸻
+
+Fase 3
+
+Cadastro de pacientes.
+
+Aqui o valor explode porque:
+
+* frequência é maior;
+* repetição é maior;
+* ganho operacional é enorme.
+
+⸻
+
+Minha recomendação estratégica
+
+Eu NÃO venderia isso como:
+
+“IA por voz”.
+
+Eu venderia como:
+
+“Cadastro conversacional”.
+
+Porque o valor percebido não é IA.
+É:
+
+* menos burocracia,
+* menos digitação,
+* menos atrito.
+
+Isso é muito mais forte.
+
+⸻
+
+O que eu faria depois deste PRD
+
+Próximo documento ideal:
+
+1. Fluxos conversacionais detalhados
+2. Estados da UI
+3. Prompt engineering do assistente
+4. Estratégia de confirmação
+5. Definição de erros recuperáveis
+6. Arquitetura STT/TTS/LLM
+7. Telemetria e analytics
+
+E sinceramente:
+o diferencial do PSI pode virar justamente essa interface operacional por voz para analistas.
+
+Você está num território muito interessante.

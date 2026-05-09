@@ -1,165 +1,36 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import DictationView from './lib/components/DictationView.svelte';
+	import CompanyRegistrationPage from './lib/components/CompanyRegistrationPage.svelte';
 
-	let transcript = '';
-	let isListening = false;
-	let finalTranscript = '';
-	let interimTranscript = '';
-
-	// Local proxy that injects the xAI Authorization header (do NOT call xAI directly from the browser).
-	const PROXY_URL = (import.meta.env.VITE_STT_PROXY_URL as string) ?? 'ws://localhost:8787/stt';
-
-	let ws: WebSocket | null = null;
-	let audioContext: AudioContext | null = null;
-	let workletNode: AudioWorkletNode | null = null;
-	let sourceNode: MediaStreamAudioSourceNode | null = null;
-	let mediaStream: MediaStream | null = null;
-
-	onMount(() => {
-		console.log('STT proxy:', PROXY_URL);
-	});
-
-	async function toggleListening() {
-		if (isListening) {
-			stopAudioCapture();
-			try { ws?.send(JSON.stringify({ type: 'audio.done' })); } catch {}
-			ws?.close();
-			isListening = false;
-			return;
-		}
-
-		finalTranscript = '';
-		transcript = '';
-		isListening = true;
-
-		// Start mic first so we know the real sample rate (browsers default to 48 kHz).
-		await startAudioCapture();
-		const sampleRate = audioContext?.sampleRate ?? 16000;
-
-		const params = new URLSearchParams({
-			sample_rate: String(sampleRate),
-			encoding: 'pcm',
-			interim_results: 'true',
-			language: 'en',
-		});
-		ws = new WebSocket(`${PROXY_URL}?${params.toString()}`);
-		ws.binaryType = 'arraybuffer';
-
-		ws.onopen = () => console.log('✅ Conectado ao proxy STT');
-
-		ws.onmessage = (event) => {
-			const data = JSON.parse(event.data);
-			if (data.type === 'transcript.partial' || data.type === 'transcript.done') {
-				if (data.is_final) {
-					finalTranscript += (data.text ?? '') + ' ';
-					interimTranscript = '';
-				} else {
-					interimTranscript = data.text ?? '';
-				}
-				transcript = finalTranscript + interimTranscript;
-			} else if (data.type === 'error') {
-				console.error('STT error:', data.message);
-			}
-		};
-
-		ws.onerror = (err) => {
-			console.error('Erro no WebSocket STT:', err);
-			stopAudioCapture();
-			isListening = false;
-		};
-
-		ws.onclose = () => {
-			stopAudioCapture();
-			isListening = false;
-		};
-	}
-
-	async function startAudioCapture() {
-		mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-		audioContext = new AudioContext();
-
-		// Carrega o AudioWorklet (substitui ScriptProcessorNode, que está deprecated)
-		await audioContext.audioWorklet.addModule('/pcm-processor.js');
-
-		sourceNode = audioContext.createMediaStreamSource(mediaStream);
-		workletNode = new AudioWorkletNode(audioContext, 'pcm-processor');
-
-		workletNode.port.onmessage = (event) => {
-			// pcm-processor.js posts an ArrayBuffer of signed 16-bit little-endian PCM.
-			const pcmBuffer = event.data as ArrayBuffer;
-			if (ws?.readyState === WebSocket.OPEN) {
-				ws.send(pcmBuffer);
-			}
-		};
-
-		sourceNode.connect(workletNode);
-		// Não conectamos ao destination para evitar feedback do microfone.
-	}
-
-	function stopAudioCapture() {
-		try {
-			workletNode?.port.close();
-			workletNode?.disconnect();
-		} catch {}
-		try {
-			sourceNode?.disconnect();
-		} catch {}
-		mediaStream?.getTracks().forEach((t) => t.stop());
-		audioContext?.close().catch(() => {});
-
-		workletNode = null;
-		sourceNode = null;
-		mediaStream = null;
-		audioContext = null;
-	}
-
-	function copyTranscript() {
-		navigator.clipboard.writeText(finalTranscript.trim());
-		alert('✅ Transcrição copiada!');
-	}
-
-	function clearTranscript() {
-		finalTranscript = '';
-		transcript = '';
-	}
+	type View = 'dictation' | 'company';
+	let view: View = $state('company');
 </script>
 
-<!-- O resto do HTML/visual continua igual ao anterior -->
-<main class="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col items-center justify-center p-8 font-sans">
-	<div class="max-w-3xl w-full">
-		<div class="flex items-center justify-between mb-8">
-			<h1 class="text-4xl font-light tracking-tight">Ditado Grok</h1>
-			<button
-				on:click={toggleListening}
-				class="px-6 py-3 rounded-2xl font-medium transition-all flex items-center gap-2 {isListening 
-					? 'bg-red-600 hover:bg-red-700' 
-					: 'bg-white text-zinc-900 hover:bg-zinc-100'}"
-			>
-				{isListening ? '⏹️ Parar' : '🎤 Começar (xAI)'}
-			</button>
-		</div>
+<main class="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col items-center p-8 font-sans">
+	<nav class="max-w-3xl w-full flex gap-2 mb-6">
+		<button
+			class="px-4 py-2 rounded-xl font-medium {view === 'company'
+				? 'bg-white text-zinc-900'
+				: 'bg-zinc-800 text-zinc-200 hover:bg-zinc-700'}"
+			onclick={() => (view = 'company')}
+		>
+			Cadastro por voz
+		</button>
+		<button
+			class="px-4 py-2 rounded-xl font-medium {view === 'dictation'
+				? 'bg-white text-zinc-900'
+				: 'bg-zinc-800 text-zinc-200 hover:bg-zinc-700'}"
+			onclick={() => (view = 'dictation')}
+		>
+			Ditado livre
+		</button>
+	</nav>
 
-		<div class="bg-zinc-900 border border-zinc-800 rounded-3xl p-8 min-h-[420px] shadow-2xl">
-			{#if transcript}
-				<p class="text-2xl leading-relaxed text-zinc-100 whitespace-pre-wrap">
-					{finalTranscript}
-					<span class="text-zinc-400">{interimTranscript}</span>
-				</p>
-			{:else}
-				<div class="flex flex-col items-center justify-center h-full text-center text-zinc-500">
-					<div class="text-7xl mb-6 opacity-30">🎤</div>
-					<p class="text-xl">Fale naturalmente.<br>Usando xAI STT</p>
-				</div>
-			{/if}
-		</div>
-
-		<div class="flex gap-4 mt-6">
-			<button on:click={copyTranscript} disabled={!finalTranscript} class="flex-1 py-4 bg-zinc-800 hover:bg-zinc-700 rounded-2xl font-medium">
-				📋 Copiar texto
-			</button>
-			<button on:click={clearTranscript} disabled={!finalTranscript} class="flex-1 py-4 bg-zinc-800 hover:bg-zinc-700 rounded-2xl font-medium">
-				🗑️ Limpar
-			</button>
-		</div>
+	<div class="w-full flex justify-center">
+		{#if view === 'company'}
+			<CompanyRegistrationPage />
+		{:else}
+			<DictationView />
+		{/if}
 	</div>
 </main>
